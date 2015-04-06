@@ -114,4 +114,8 @@ extern NSInteger const kPFErrorLinkedInInvalidSession;
  */
 + (BOOL)logOut;
 
++ (NSString *)linkedInAccessToken;
++ (NSDate *)linkedInAccessTokenExpirationDate;
++ (NSString *)linkedInUserId;
+
 @end

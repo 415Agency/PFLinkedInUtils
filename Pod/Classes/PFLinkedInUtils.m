@@ -19,6 +19,7 @@ NSInteger const kPFErrorLinkedInInvalidSession = 351;
 NSString *kPFLinkedInTokenKey = @"linkedin_token";
 NSString *kPFLinkedInExpirationKey = @"linkedin_expiration";
 NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
+NSString *kPFLinkedInUserId = @"linkedin_user_id";
 
 
 @interface PFLinkedInUtils ()
@@ -179,6 +180,7 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
     [userDefaults removeObjectForKey:kPFLinkedInTokenKey];
     [userDefaults removeObjectForKey:kPFLinkedInExpirationKey];
     [userDefaults removeObjectForKey:kPFLinkedInCreationKey];
+    [userDefaults removeObjectForKey:kPFLinkedInUserId];
     return [userDefaults synchronize];
 }
 
@@ -189,7 +191,7 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
     dispatch_once(&onceToken, ^{
         sharedInstance = [[self alloc] init];
     });
-
+    
     return sharedInstance;
 }
 
@@ -223,27 +225,27 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
 + (void)getProfileIDWithAccessToken:(NSString *)accessToken block:(PFStringResultBlock)block
 {
     [self.linkedInHttpClient GET:[NSString stringWithFormat:@"https://api.linkedin.com/v1/people/~?oauth2_access_token=%@&format=json", accessToken] parameters:nil success:^(AFHTTPRequestOperation *operation, id responseObject) {
-        NSString *profileID = nil;
-        NSString *profileURL = responseObject[@"siteStandardProfileRequest"][@"url"];
-        if (profileURL)
-        {
-            NSString *params = [[profileURL componentsSeparatedByString:@"?"] lastObject];
-            if (params)
-            {
-                for (NSString *param in [params componentsSeparatedByString:@"&"])
-                {
-                    NSArray *keyVal = [param componentsSeparatedByString:@"="];
-                    if (keyVal.count > 1)
-                    {
-                        if ([keyVal[0] isEqualToString:@"id"])
-                        {
-                            profileID = keyVal[1];
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+        NSString *profileID = responseObject[@"id"];
+        //        NSString *profileURL = responseObject[@"siteStandardProfileRequest"][@"url"];
+        //        if (profileURL)
+        //        {
+        //            NSString *params = [[profileURL componentsSeparatedByString:@"?"] lastObject];
+        //            if (params)
+        //            {
+        //                for (NSString *param in [params componentsSeparatedByString:@"&"])
+        //                {
+        //                    NSArray *keyVal = [param componentsSeparatedByString:@"="];
+        //                    if (keyVal.count > 1)
+        //                    {
+        //                        if ([keyVal[0] isEqualToString:@"id"])
+        //                        {
+        //                            profileID = keyVal[1];
+        //                            break;
+        //                        }
+        //                    }
+        //                }
+        //            }
+        //        }
         if (profileID)
         {
             if (block)
@@ -253,7 +255,7 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
         }
         else if (block)
         {
-                block(nil, [NSError errorWithDomain:PFParseErrorDomain code:kPFErrorLinkedInIdMissing userInfo:@{NSLocalizedDescriptionKey : @"LinkedIn Id Missing"}]);
+            block(nil, [NSError errorWithDomain:PFParseErrorDomain code:kPFErrorLinkedInIdMissing userInfo:@{NSLocalizedDescriptionKey : @"LinkedIn Id Missing"}]);
         }
     } failure:^(AFHTTPRequestOperation *operation, NSError *error) {
         if (block)
@@ -265,6 +267,10 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
 
 + (void)logInOrSignUpUserWithAccessToken:(NSString *)accessToken expirationDate:(NSDate *)expirationDate profileID:(NSString *)profileID block:(PFUserResultBlock)block
 {
+    
+    [[NSUserDefaults standardUserDefaults] setObject:profileID forKey:kPFLinkedInUserId];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    
     if (accessToken && expirationDate && profileID)
     {
         PFQuery *profileQuery = [PFQuery queryWithClassName:@"LinkedInUser"];
@@ -280,7 +286,16 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
                 else
                 {
                     PFObject *linkedInUser = objects.firstObject;
+                    linkedInUser[@"expirationDate"] = expirationDate;
+                    linkedInUser[@"accessToken"] = accessToken;
+                    
+                    [linkedInUser save];
+                    
+                    PFInstallation *currentInstallation = [PFInstallation currentInstallation];
+                    currentInstallation[@"linkedInUserId"] = linkedInUser[@"userId"];
+                    [currentInstallation save];
                     PFObject *userObject = [linkedInUser objectForKey:@"user"];
+                    
                     [userObject fetchIfNeededInBackgroundWithBlock:^(PFObject *object, NSError *error) {
                         PFUser *user = (PFUser *)object;
                         [PFUser logInWithUsernameInBackground:user.username password:profileID block:block];
@@ -304,8 +319,8 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
     if (accessToken && expirationDate && profileID)
     {
         PFUser *user = [PFUser user];
-        [user setObject:[self randomStringWithLength:25] forKey:@"username"];
-        [user setObject:profileID forKey:@"password"];
+        user.username = [self randomStringWithLength:25];
+        user.password = profileID;
         [user signUpInBackgroundWithBlock:^(BOOL signUpSucceeded, NSError *signUpError) {
             if (signUpSucceeded && !signUpError)
             {
@@ -349,7 +364,7 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
         PFQuery *profileQuery = [PFQuery queryWithClassName:@"LinkedInUser"];
         [profileQuery whereKey:@"userId" equalTo:profileID];
         PFQuery *orQuery = [PFQuery orQueryWithSubqueries:@[userQuery, profileQuery]];
-
+        
         [orQuery findObjectsInBackgroundWithBlock:^(NSArray *objects, NSError *queryError) {
             if (!queryError)
             {
@@ -390,12 +405,12 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
 {
     NSString *letters = @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     NSMutableString *randomString = [NSMutableString stringWithCapacity:length];
-
+    
     for (int i = 0; i < length; i++)
     {
         [randomString appendFormat:@"%C", [letters characterAtIndex:arc4random_uniform((unsigned int)[letters length])]];
     }
-
+    
     return randomString;
 }
 
@@ -409,4 +424,9 @@ NSString *kPFLinkedInCreationKey = @"linkedin_token_created_at";
     return [NSDate dateWithTimeIntervalSince1970:([[NSUserDefaults standardUserDefaults] doubleForKey:kPFLinkedInCreationKey] + [[NSUserDefaults standardUserDefaults] doubleForKey:kPFLinkedInExpirationKey])];
 }
 
+
++ (NSString *)linkedInUserId
+{
+    return [[NSUserDefaults standardUserDefaults] stringForKey:kPFLinkedInUserId];
+}
 @end

@@ -9,11 +9,11 @@ Pod::Spec.new do |s|
 
 											 ![PFLinkedInUtils Screenshot](https://raw.githubusercontent.com/alexruperez/PFLinkedInUtils/master/screenshot.png)
                        DESC
-  s.homepage         = "https://github.com/alexruperez/PFLinkedInUtils"
+  s.homepage         = "https://github.com/415Agency/PFLinkedInUtils"
   s.screenshots      = "https://raw.githubusercontent.com/alexruperez/PFLinkedInUtils/master/screenshot.png"
   s.license          = 'MIT'
   s.author           = { "alexruperez" => "contact@alexruperez.com" }
-  s.source           = { :git => "https://github.com/alexruperez/PFLinkedInUtils.git", :tag => s.version.to_s }
+  s.source           = { :git => "https://github.com/415Agency/PFLinkedInUtils.git", :tag => s.version.to_s }
   s.social_media_url = 'https://twitter.com/alexruperez'
 	
   s.platform     = :ios, '6.0'
